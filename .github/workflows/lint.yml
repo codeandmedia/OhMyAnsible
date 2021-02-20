@@ -10,5 +10,9 @@ jobs:
       - uses: actions/checkout@v2
       - name: ansible-lint
         uses: ansible/ansible-lint-action@master
-        with: |
-          sysctl/sysctl_vars.yaml
+        with: 
+          targets: ""
+          override-deps: |
+            ansible==2.9
+            ansible-lint==4.2.0
+          args: ""
