@@ -11,5 +11,5 @@ jobs:
       - name: ansible-lint
         run: | 
           pip install "ansible-lint[yamllint]"
-          ansible-lint -p  ${{ github.workspace }}
+          /home/runner/.local/bin/ansible-lint -p  ${{ github.workspace }}
 
