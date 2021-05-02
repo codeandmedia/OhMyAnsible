@@ -1,0 +1,134 @@
+---
+- name: webserver
+  hosts: all
+  become: yes
+  handlers:
+  - name: restart nginx
+    service: name=nginx state=restarted
+  - name: save iptables
+    iptables:  
+      path: /etc/iptables/rules.v4
+      state: save
+      backup: true  
+    notify: reload iptables
+  - name: reload iptables
+    iptables: 
+      state: reload
+
+  vars: 
+    domains:
+      - first.a3.by
+      - second.a3.by
+
+  tasks: 
+    #general
+    - name: Upgrade system
+      apt: upgrade=dist update_cache=yes
+
+    - name: Install Iptables
+      apt: name=iptables-persistent   
+
+    #iptables
+    - name: Allow related and established connections
+      iptables:
+         chain: INPUT
+         ctstate: ESTABLISHED,RELATED
+         jump: ACCEPT
+
+    - name: input drop
+      iptables:
+         chain: INPUT
+         policy: DROP
+
+    - name: forward drop
+      iptables:
+        chain: FORWARD
+        policy: DROP
+
+    - name: output accept
+      iptables:
+        chain: OUTPUT
+        policy: ACCEPT
+
+    - name: lo traffic input
+      iptables:
+        chain: INPUT
+        jump: ACCEPT
+        in_interface: lo
+
+    - name: HTTP
+      iptables:
+        chain: INPUT
+        destination_port: '80'
+        jump: ACCEPT
+        protocol: tcp
+
+    - name: HTTPS
+      iptables:
+        chain: INPUT
+        destination_port: '443'
+        jump: ACCEPT
+        protocol: tcp
+
+    - name: rsync
+      iptables:
+        chain: INPUT
+        destination_port: '873'
+        jump: ACCEPT
+        protocol: tcp
+
+    - name: ssh for tasks
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: '22'
+        source: 1.1.1.1/32 #my ip here
+        jump: ACCEPT
+      notify: save iptables
+
+    #nginx
+    - name: install letsencrypt
+      apt: name=letsencrypt state=latest
+    
+    - name: install gnupg2
+      apt: name=gnupg2 state=latest
+
+    - name: Ensure APT official nginx key
+      apt_key: url=http://nginx.org/keys/nginx_signing.key
+
+    - name: Ensure APT official nginx repository
+      apt_repository: repo="deb http://nginx.org/packages/{{ ansible_distribution|lower }}/ {{ ansible_distribution_release }} nginx"
+
+    - name: Install nginx
+      apt: name=nginx state=latest update_cache=yes
+
+    - name: Install system nginx config
+      template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+      notify: restart nginx
+
+    - name: Remove default nginx config
+      file: name=/etc/nginx/conf.d/default.conf state=absent
+
+    - name: www folder create
+      file:
+        path: /www
+        state: directory
+        recurse: yes
+        owner: www-data
+        group: www-data
+        mode: '0644'
+
+    - name: folder create
+      file:
+        path: /www/{{ item }}
+        state: directory
+      with_items: "{{ domains }}"
+
+    - name: Add NGINX virtualhost config
+      template:
+        src: default.conf.j2
+        dest: /etc/nginx/conf.d/{{ item }}.conf
+      with_items: "{{ domains }}"
+      notify: restart nginx

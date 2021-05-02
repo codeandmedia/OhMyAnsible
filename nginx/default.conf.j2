@@ -1,0 +1,59 @@
+server {
+    listen 80;
+    server_name {{ item }};
+
+    location / { return 302 https://{{ item }}$request_uri; }
+
+}
+
+server {
+    listen 443 ssl http2 reuseport backlog=65535;
+    server_name {{ item }};
+
+    etag on;
+    send_timeout 10s;
+    server_name_in_redirect off;
+    root /www/{{ item }};
+    index index.html;
+
+    ## OCSP Stapling
+    resolver 1.1.1.1 [2606:4700:4700::1111];
+    ssl_stapling on;
+    ssl_stapling_verify on;
+
+    ssl_session_tickets on;
+    ssl_certificate /etc/letsencrypt/live/{{ item }}/fullchain.pem; 
+    ssl_certificate_key /etc/letsencrypt/live/{{ item }}/privkey.pem; 
+    ssl_session_cache shared:le_nginx_SSL:20m; 
+    ssl_session_timeout 4h; 
+    ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3; 
+    ssl_prefer_server_ciphers on; 
+    ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256 ECDHE-ECDSA-AES256-GCM-SHA384 ECDHE-ECDSA-AES128-SHA ECDHE-ECDSA-AES256-SHA ECDHE-ECDSA-AES128-SHA256 ECDHE-ECDSA-AES256-SHA384 ECDHE-RSA-AES128-GCM-SHA256 ECDHE-RSA-AES256-GCM-SHA384 ECDHE-RSA-AES128-SHA ECDHE-RSA-AES128-SHA256 ECDHE-RSA-AES256-SHA384 DHE-RSA-AES128-GCM-SHA256 DHE-RSA-AES256-GCM-SHA384 DHE-RSA-AES128-SHA DHE-RSA-AES256-SHA DHE-RSA-AES128-SHA256 DHE-RSA-AES256-SHA256 EDH-RSA-DES-CBC3-SHA"; # managed by Certbot
+
+    location ^~ /.well-known/acme-challenge/ {
+        allow all;
+        default_type "text/plain";
+    }
+
+    location /img {
+    expires 1M;
+    access_log off;
+    add_header Cache-Control "public";
+
+    valid_referers none blocked {{ item }};    
+        if ($invalid_referer) {
+                return 444;
+            }
+    }
+
+    location / {
+            try_files $uri $uri/ =404;
+            limit_conn addr 10;
+            aio threads;
+            access_log /var/log/nginx/{{ item }}.log main buffer=256k flush=10s;
+            error_log /var/log/nginx/{{ item }}.err.log crit;
+
+        }
+	
+}
+
